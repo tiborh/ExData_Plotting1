@@ -1,4 +1,4 @@
-source("./src/functions.r")
+source("./src/functions.r")             # functions needed to download and process original data
 
 draw.plot.3 <- function(to.png=T) {
     if (to.png==T)
@@ -20,5 +20,5 @@ draw.plot.3 <- function(to.png=T) {
         dev.off()
 }
 
-twodays <- prepare.data()
+twodays <- prepare.data()               # to get two days' data for the plot
 draw.plot.3()

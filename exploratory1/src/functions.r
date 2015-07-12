@@ -1,3 +1,4 @@
+## displays the first "nlines" of a file
 file.head <- function(path.to.file,nlines=5)
     {
         con <- file(path.to.file, "rt")
@@ -6,6 +7,7 @@ file.head <- function(path.to.file,nlines=5)
         rm(con)
     }
 
+## displays the first "nlines" of a zipped file
 zipped.file.head <- function(path.to.zfile,zpath.to.file,nlines=5)
     {
         data <- unz(path.to.zfile, zpath.to.file)
@@ -13,13 +15,18 @@ zipped.file.head <- function(path.to.zfile,zpath.to.file,nlines=5)
         rm(data)
     }
 
-get.the.file <- function(fileUrl,file.dest)
-{
-    ## for hard copy
-    download.file(fileUrl,destfile=file.dest,method="curl")
-    ##zipped.file.head(file.dest,dat.file)
-}
+## a solution to download the file only temporarily (currently, unused path)
+get.full.dataframe1 <- function(fileUrl,dat.file,file.dest)
+    {
+        ## for temp solution
+        temp <- tempfile()
+        download.file(fileUrl,temp,method="curl")
+        tdata <- read.table(unz(temp, dat.file),header=T,sep=";",na.strings="?")
+        unlink(temp)                            # throwing away data file
+        return(tdata)
+    }
 
+## gets the data from the downloaded zip file
 get.full.dataframe2 <- function(file.dest,dat.file)
     {
         tdata <- read.table(unz(file.dest,dat.file),
@@ -29,54 +36,39 @@ get.full.dataframe2 <- function(file.dest,dat.file)
         return(tdata)
     }
 
-## some examination
-## str(tdata)
-## length(names(tdata))                    # should be nine
-## head(tdata)$Date
-## tail(tdata)$Date
-
+## filter out only necessary data
 get.filtered.data <- function(tdata)
     {
         ## getting only 2007-02-01 and 2007-02-02
         library(dplyr)
-        ##names(tdata)
         twodays <- filter(tdata,Date=="1/2/2007" | Date=="2/2/2007")
-        ##str(twodays)
         rm(tdata)
-        ##str(twodays.bak)
         return(twodays)
     }
 
+## transforming date and time strings to date and time columns
 transform.dates <- function(twodays,saved.twodays)
     {
-        ## date and time conversion
+        ## date and time conversion is done with lubridate functions
+        ## you may need:
+        ## install.packages("lubridate")
         library(lubridate)
-        twodays.bak = twodays
-        ## dmy(twodays[1,1])
-        ## dmy(twodays[nrow(twodays),1])
-        ## dmy(head(twodays)$Date)
-        twodays$Date = dmy(twodays$Date)
-        ## head(twodays)$Time
-        ## hms(head(twodays)$Time)
-        twodays$Time = hms(twodays$Time)
-        ## str(twodays)
-        ## head(twodays)$Time # looks a little strange because of the zero hours
-        ## tail(twodays)$Time   # looks quite normal
-        twodays$DateTime = dmy_hms(paste(twodays.bak$Date,twodays.bak$Time))
-        save(twodays.bak,file="./data/twodays.bak")
+        twodays.bak = twodays           # creating a backup copy
+        twodays$Date = dmy(twodays$Date) # Date column converted to Date
+        twodays$Time = hms(twodays$Time) # Time column converted into Time
+        twodays$DateTime = dmy_hms(paste(twodays.bak$Date,twodays.bak$Time)) # a new column which is a combination of the Date and Time columns
         rm(twodays.bak)
-        save(twodays,file=saved.twodays)
-        rm(twodays)
-        load(saved.twodays)
-        ##names(twodays)
+        save(twodays,file=saved.twodays) # to create a cached variable for later use
+
         return(twodays)
     }
 
+## gets two days' data from zipped file
 get.twodays <- function(file.dest,file.path,saved.twodays)
     {
-        full.data <- get.full.dataframe2(file.dest,file.path)
-        filtered.data <- get.filtered.data(full.data)
-        twodays <- transform.dates(filtered.data,saved.twodays)
+        full.data <- get.full.dataframe2(file.dest,file.path) # full data table is extracted
+        filtered.data <- get.filtered.data(full.data)         # only the filtered data remains
+        twodays <- transform.dates(filtered.data,saved.twodays) # date and time are transformed into formats to ease their use
         return(twodays)
     }
 
@@ -123,6 +115,7 @@ draw.plot.3 <- function(to.png=T) {
         dev.off()
 }
 
+## used in plot4
 draw.voltage <- function() {
     plot(twodays$DateTime,
          twodays$Voltage,
@@ -130,6 +123,7 @@ draw.voltage <- function() {
          ylab = "Voltage",xlab="datetime")
 }
 
+## used in plot4
 draw.reactive <- function() {
     plot(twodays$DateTime,
          twodays$Global_reactive_power,
@@ -148,27 +142,33 @@ draw.plot.4 <- function() {
     dev.off()
 }
 
+## prepares the data for the plots
 prepare.data <- function()
     {
-        data.dir <- file.path("./data")
-        if(!file.exists(data.dir))
-            dir.create(data.dir)
-        saved.twodays = "./data/twodays.save"
+        saved.twodays = "./data/twodays.save" # path to cached data
         
         if(!exists("twodays"))
             {
+                ## if cached data is available, use that
                 if(file.exists(saved.twodays))
                     {
                         load(saved.twodays)
                     }
                 else
                     {
+                        data.dir <- file.path("./data")
+                        ## create data dir if it does not exist
+                        if(!file.exists(data.dir))
+                            dir.create(data.dir)
+                        ## get the paths right
                         fileUrl <- "https://d396qusza40orc.cloudfront.net/exdata%2Fdata%2Fhousehold_power_consumption.zip"
                         file.dest <- file.path("./data/hpc.zip")
                         dat.file <- file.path("household_power_consumption.txt")
-                        
+
+                        ## download zipped file if necessary
                         if (!file.exists(file.dest))
-                            get.the.file(fileUrl,file.dest)
+                            download.file(fileUrl,destfile=file.dest,method="curl")
+                        ## get the two days' data in appropriate format
                         twodays <- get.twodays(file.dest,dat.file,saved.twodays)
                     }
             }
